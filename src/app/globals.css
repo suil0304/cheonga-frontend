@@ -77,7 +77,7 @@ input:focus-visible {
   display: inline-flex;
   min-height: 52px;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -85,22 +85,20 @@ input:focus-visible {
 }
 
 .brand-mark {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 13px;
-  background: var(--green);
-  color: white;
-  font-size: 23px;
-  font-weight: 800;
+  width: 38px;
+  height: 38px;
+  color: var(--green);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.8;
 }
 
 .brand-name {
   color: var(--ink);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.06em;
+  font-size: 23px;
+  font-weight: 750;
+  letter-spacing: -0.075em;
+  line-height: 1;
 }
 
 .demo-badge {
@@ -284,15 +282,12 @@ input:focus-visible {
 }
 
 .illustration-mark {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--green);
-  color: white;
-  font-size: 17px;
-  font-weight: 800;
+  width: 31px;
+  height: 31px;
+  color: var(--green);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 3;
 }
 
 .illustration-message {
@@ -1208,16 +1203,13 @@ input:focus-visible {
 }
 
 .assistant-avatar {
-  display: grid;
-  width: 43px;
-  height: 43px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: 15px;
-  background: var(--green);
-  color: #fff;
-  font-size: 20px;
-  font-weight: 800;
+  color: var(--green);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.8;
 }
 
 .conversation-heading h2 {
@@ -1420,12 +1412,6 @@ input:focus-visible {
 
   .topbar {
     min-height: 72px;
-  }
-
-  .brand-mark {
-    width: 38px;
-    height: 38px;
-    border-radius: 13px;
   }
 
   .welcome-panel {

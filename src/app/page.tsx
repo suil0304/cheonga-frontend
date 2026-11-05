@@ -70,6 +70,20 @@ const quickQuestions = [
   { title: "키오스크 이용하기", question: "키오스크 이용 방법을 알려주세요." },
 ];
 
+function CheongaMark({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 40 40"
+    >
+      <path d="M7 15c4.3-4 8.7-4 13 0s8.7 4 13 0" />
+      <path d="M7 23c4.3-4 8.7-4 13 0s8.7 4 13 0" />
+    </svg>
+  );
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [step, setStep] = useState(0);
@@ -241,9 +255,7 @@ export default function Home() {
           onClick={resetPrototype}
           type="button"
         >
-          <span aria-hidden="true" className="brand-mark">
-            청
-          </span>
+          <CheongaMark className="brand-mark" />
           <span className="brand-name">청아</span>
         </button>
         <span className="demo-badge">체험 화면</span>
@@ -254,7 +266,7 @@ export default function Home() {
           <div className="welcome-art" aria-hidden="true">
             <div className="welcome-illustration">
               <div className="illustration-heading">
-                <span className="illustration-mark">청</span>
+                <CheongaMark className="illustration-mark" />
                 <span>청아가 알려드려요</span>
               </div>
               <p className="illustration-message">
@@ -758,9 +770,7 @@ export default function Home() {
             ref={conversationRef}
           >
             <div className="conversation-heading">
-              <span className="assistant-avatar" aria-hidden="true">
-                청
-              </span>
+              <CheongaMark className="assistant-avatar" />
               <div>
                 <h2 id="conversation-title">청아에게 물어보기</h2>
                 <p>쉬운 말로 하나씩 도와드릴게요.</p>
