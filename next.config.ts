@@ -1,7 +1,23 @@
 import type { NextConfig } from "next";
 
+const backendApiUrl =
+  process.env.BACKEND_API_URL ??
+  (process.env.NODE_ENV === "development" ? "https://localhost:5001" : undefined);
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  async rewrites() {
+    if (!backendApiUrl) {
+      return [];
+    }
+
+    const backendUrl = backendApiUrl.replace(/\/+$/, "");
+    return [
+      { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
+      { source: "/auth/:path*", destination: `${backendUrl}/auth/:path*` },
+      { source: "/signin-oidc", destination: `${backendUrl}/signin-oidc` },
+      { source: "/healthz", destination: `${backendUrl}/healthz` },
+    ];
+  },
   experimental: {
     agentFeedback: true,
   },
