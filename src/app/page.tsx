@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-type Screen = "welcome" | "onboarding" | "consent-blocked" | "login" | "home";
+type Screen = "welcome" | "onboarding" | "consent-blocked" | "home";
 type PermissionState =
   | "idle"
   | "requesting"
@@ -95,7 +95,6 @@ export default function Home() {
   const [checkInTime, setCheckInTime] = useState("");
   const [permissionState, setPermissionState] =
     useState<PermissionState>("idle");
-  const [loginNotice, setLoginNotice] = useState(false);
   const [question, setQuestion] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const conversationRef = useRef<HTMLElement>(null);
@@ -112,8 +111,7 @@ export default function Home() {
     if (step === 0 && !consentAccepted) return;
 
     if (step === steps.length - 1) {
-      setLoginNotice(false);
-      setScreen("login");
+      setScreen("home");
       return;
     }
 
@@ -164,7 +162,6 @@ export default function Home() {
     setCheckInFrequency(2);
     setCheckInTime("");
     setPermissionState("idle");
-    setLoginNotice(false);
     setQuestion("");
     setChatMessages([]);
   }
@@ -364,7 +361,7 @@ export default function Home() {
                       <span className="list-check" aria-hidden="true">
                         ✓
                       </span>
-                      Google 계정의 이름은 대화 중 부르는 데 사용해요.
+                      선택하신 관심 주제와 익숙한 정도를 안내에 활용해요.
                     </li>
                     <li>
                       <span className="list-check" aria-hidden="true">
@@ -624,7 +621,7 @@ export default function Home() {
               onClick={continueOnboarding}
               type="button"
             >
-              {step === steps.length - 1 ? "로그인으로" : "다음"}
+              {step === steps.length - 1 ? "안내 시작하기" : "다음"}
               <span aria-hidden="true">→</span>
             </button>
           </div>
@@ -659,49 +656,6 @@ export default function Home() {
             type="button"
           >
             처음 화면으로 돌아가기
-          </button>
-        </section>
-      )}
-
-      {screen === "login" && (
-        <section aria-labelledby="login-title" className="message-panel login-panel">
-          <div aria-hidden="true" className="google-mark">
-            G
-          </div>
-          <p className="eyebrow">거의 다 왔어요</p>
-          <h1 id="login-title">Google 계정으로 로그인해 주세요</h1>
-          <p className="step-description">
-            로그인해야 청아의 안내 서비스를 이용할 수 있어요. 로그인은
-            맞춤화 동의와 별도로 진행돼요.
-          </p>
-          <button
-            className="button google-button"
-            onClick={() => {
-              setLoginNotice(false);
-              setScreen("home");
-            }}
-            type="button"
-          >
-            <span aria-hidden="true" className="google-button-mark">
-              G
-            </span>
-            Google 로그인 시연하기
-          </button>
-          <p className="demo-note login-demo-note">
-            실제 Google 로그인이 아닌 화면 시연입니다.
-          </p>
-          {loginNotice && (
-            <p aria-live="polite" className="inline-notice">
-              로그인이 취소되었어요. 서비스를 이용하려면 이 화면에서 다시
-              로그인해 주세요.
-            </p>
-          )}
-          <button
-            className="decline-link"
-            onClick={() => setLoginNotice(true)}
-            type="button"
-          >
-            로그인하지 않고 돌아가기
           </button>
         </section>
       )}
