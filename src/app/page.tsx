@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Screen = "welcome" | "onboarding" | "consent-blocked" | "login" | "home";
 type PermissionState =
@@ -11,6 +11,13 @@ type PermissionState =
   | "insecure"
   | "error";
 type ChatMessage = { id: number; sender: "user" | "assistant"; text: string };
+type GuidanceResponse = {
+  status: string;
+  message: string;
+  answer: string | null;
+  sources: { title: string; sourceName: string; sourceUrl: string | null }[];
+  isMock: boolean;
+};
 type TopicShortcut = {
   id: string;
   title: string;
@@ -84,7 +91,15 @@ export default function Home() {
   const [loginNotice, setLoginNotice] = useState(false);
   const [question, setQuestion] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isSendingQuestion, setIsSendingQuestion] = useState(false);
   const conversationRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("signedIn") === "1") {
+      setScreen("home");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   function toggleTopic(topic: string) {
     setSelectedTopics((current) =>
@@ -155,20 +170,79 @@ export default function Home() {
     setChatMessages([]);
   }
 
-  function sendQuestion(text: string) {
+  async function sendQuestion(text: string) {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSendingQuestion) return;
 
     setChatMessages((messages) => [
       ...messages,
       { id: Date.now(), sender: "user", text: trimmed },
-      {
-        id: Date.now() + 1,
-        sender: "assistant",
-        text: "아직 공식 교육 자료와 연결되지 않아 정확한 이용 방법을 확인할 수 없어요. 이 체험 화면에서는 확인되지 않은 안내를 만들어 말씀드리지 않아요.",
-      },
     ]);
     setQuestion("");
+    setIsSendingQuestion(true);
+
+    try {
+      const tokenResponse = await fetch("/api/v1/antiforgery", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!tokenResponse.ok) {
+        throw new Error(
+          tokenResponse.status === 401
+            ? "로그인해야 안내를 이용할 수 있어요."
+            : "백엔드 연결 또는 로그인을 확인할 수 없어요.",
+        );
+      }
+
+      const tokenPayload: { requestToken: string } = await tokenResponse.json();
+      const response = await fetch("/api/v1/guidance", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": tokenPayload.requestToken,
+        },
+        body: JSON.stringify({ contextSummary: trimmed, region: null }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "로그인 세션이 만료되었어요. 다시 로그인해 주세요."
+            : "안내 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.",
+        );
+      }
+
+      const result: GuidanceResponse = await response.json();
+      const sources = result.sources.map((source) => source.title).join(", ");
+      const answer =
+        result.status === "grounded" && result.answer
+          ? result.answer
+          : result.message;
+      const responseText =
+        result.isMock && sources
+          ? `${answer}\n확인한 개발용 자료: ${sources}`
+          : answer;
+      setChatMessages((messages) => [
+        ...messages,
+        { id: Date.now(), sender: "assistant", text: responseText },
+      ]);
+    } catch (error) {
+      console.error("Could not retrieve guidance", error);
+      setChatMessages((messages) => [
+        ...messages,
+        {
+          id: Date.now(),
+          sender: "assistant",
+          text:
+            error instanceof Error
+              ? error.message
+              : "안내 요청 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.",
+        },
+      ]);
+    } finally {
+      setIsSendingQuestion(false);
+    }
   }
 
   function openTopic(questionText: string) {
@@ -246,7 +320,7 @@ export default function Home() {
           </span>
           <span className="brand-name">청아</span>
         </button>
-        <span className="demo-badge">체험 화면</span>
+        <span className="demo-badge">개발용 연동</span>
       </header>
 
       {screen === "welcome" && (
@@ -293,7 +367,7 @@ export default function Home() {
               시작하기 <span aria-hidden="true">→</span>
             </button>
             <p className="demo-note">
-              체험 화면입니다. 입력하신 내용은 저장되거나 전송되지 않습니다.
+              현재 자료는 개발용 Mock이며 실제 이용 안내가 아닙니다.
             </p>
           </div>
         </section>
@@ -374,9 +448,9 @@ export default function Home() {
                 <div className="demo-disclosure" role="note">
                   <strong>체험 화면 안내</strong>
                   <p>
-                    지금은 실제 로그인이나 정보 저장·전송을 하지 않아요.
-                    실제 서비스 시작 전 AI/MCP 처리 시스템의 보관 조건을
-                    확인할 예정이에요.
+                    맞춤 정보 저장은 아직 연결되지 않았어요. 로그인 후 보내는
+                    안내 질문은 백엔드와 MCP로 전달되며, 현재 자료는 개발용
+                    Mock이에요.
                   </p>
                 </div>
 
@@ -662,21 +736,17 @@ export default function Home() {
             로그인해야 청아의 안내 서비스를 이용할 수 있어요. 로그인은
             맞춤화 동의와 별도로 진행돼요.
           </p>
-          <button
+          <a
             className="button google-button"
-            onClick={() => {
-              setLoginNotice(false);
-              setScreen("home");
-            }}
-            type="button"
+            href="/auth/login"
           >
             <span aria-hidden="true" className="google-button-mark">
               G
             </span>
-            Google 로그인 시연하기
-          </button>
+            Google 로그인하기
+          </a>
           <p className="demo-note login-demo-note">
-            실제 Google 로그인이 아닌 화면 시연입니다.
+            로그인 설정이 없는 환경에서는 백엔드에서 로그인을 시작할 수 없어요.
           </p>
           {loginNotice && (
             <p aria-live="polite" className="inline-notice">
@@ -712,8 +782,8 @@ export default function Home() {
           <div className="service-status" role="status">
             <span className="status-dot" aria-hidden="true" />
             <span>
-              <strong>체험 화면</strong>
-              <span>실제 안내와 정보 저장은 아직 연결되지 않았어요.</span>
+              <strong>개발용 Mock 자료</strong>
+              <span>실제 공식 자료나 복지 안내로 사용할 수 없어요.</span>
             </span>
           </div>
 
@@ -734,6 +804,7 @@ export default function Home() {
                 <button
                   className="topic-shortcut"
                   key={item.id}
+                  disabled={isSendingQuestion}
                   onClick={() => openTopic(item.question)}
                   type="button"
                 >
@@ -779,12 +850,17 @@ export default function Home() {
                   {message.text}
                 </div>
               ))}
+              {isSendingQuestion && (
+                <div aria-live="polite" className="chat-bubble assistant-bubble">
+                  자료를 확인하고 있어요.
+                </div>
+              )}
             </div>
             <form
               className="question-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                sendQuestion(question);
+                void sendQuestion(question);
               }}
             >
               <label className="sr-only" htmlFor="question-input">
@@ -795,12 +871,13 @@ export default function Home() {
                 id="question-input"
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder="예: 복지 서비스를 신청하고 싶어요"
+                disabled={isSendingQuestion}
                 value={question}
               />
               <button
                 aria-label="질문 보내기"
                 className="send-question-button"
-                disabled={!question.trim()}
+                disabled={!question.trim() || isSendingQuestion}
                 type="submit"
               >
                 보내기 <span aria-hidden="true">→</span>
@@ -829,8 +906,8 @@ export default function Home() {
           </section>
 
           <p className="home-demo-note">
-            이 화면은 시연용입니다. 대화는 저장·전송되지 않으며 실제 알림도
-            보내지 않아요.
+            질문은 백엔드를 통해 MCP로 전달됩니다. 대화 원문은 저장하지 않으며,
+            현재 연결된 자료는 개발용 Mock입니다.
           </p>
         </section>
       )}
