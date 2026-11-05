@@ -14,7 +14,6 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
       { source: "/auth/:path*", destination: `${backendUrl}/auth/:path*` },
-      { source: "/signin-oidc", destination: `${backendUrl}/signin-oidc` },
       { source: "/healthz", destination: `${backendUrl}/healthz` },
     ];
   },

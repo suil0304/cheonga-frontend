@@ -26,6 +26,7 @@ type TopicShortcut = {
 };
 
 const steps = ["동의 안내", "도움 주제", "익숙한 정도", "안부 설정"];
+const consentVersion = "guest-v1";
 
 const helpTopics = [
   {
@@ -88,17 +89,29 @@ export default function Home() {
   const [checkInTime, setCheckInTime] = useState("");
   const [permissionState, setPermissionState] =
     useState<PermissionState>("idle");
-  const [loginNotice, setLoginNotice] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const [question, setQuestion] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const conversationRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("signedIn") === "1") {
-      setScreen("home");
-      window.history.replaceState(null, "", window.location.pathname);
-    }
+    let active = true;
+    fetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("게스트 세션을 확인할 수 없습니다.");
+        const session: { authenticated: boolean } = await response.json();
+        if (active && session.authenticated) setScreen("home");
+      })
+      .catch((error: unknown) => {
+        console.error("Could not restore guest session", error);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   function toggleTopic(topic: string) {
@@ -113,7 +126,7 @@ export default function Home() {
     if (step === 0 && !consentAccepted) return;
 
     if (step === steps.length - 1) {
-      setLoginNotice(false);
+      setLoginError("");
       setScreen("login");
       return;
     }
@@ -165,9 +178,85 @@ export default function Home() {
     setCheckInFrequency(2);
     setCheckInTime("");
     setPermissionState("idle");
-    setLoginNotice(false);
+    setLoginError("");
     setQuestion("");
     setChatMessages([]);
+  }
+
+  async function getAntiforgeryToken() {
+    const response = await fetch("/api/v1/antiforgery", {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      throw new Error("요청을 확인할 수 없어요. 페이지를 새로고침해 주세요.");
+    }
+
+    const payload: { requestToken: string } = await response.json();
+    return payload.requestToken;
+  }
+
+  async function signInAsGuest() {
+    setIsSigningIn(true);
+    setLoginError("");
+    try {
+      const requestToken = await getAntiforgeryToken();
+      const response = await fetch("/auth/guest", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": requestToken,
+        },
+        body: JSON.stringify({
+          consentAccepted,
+          consentVersion,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "게스트 로그인 요청을 확인할 수 없어요."
+            : "동의를 확인하거나 게스트 세션을 만들 수 없어요. 다시 시도해 주세요.",
+        );
+      }
+      setScreen("home");
+    } catch (error) {
+      console.error("Could not create guest session", error);
+      setLoginError(
+        error instanceof Error
+          ? error.message
+          : "게스트 로그인 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  async function signOutGuest() {
+    setIsSigningOut(true);
+    setLoginError("");
+    try {
+      const requestToken = await getAntiforgeryToken();
+      const response = await fetch("/auth/logout", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "X-CSRF-TOKEN": requestToken },
+      });
+      if (!response.ok) throw new Error("로그아웃하지 못했어요. 다시 시도해 주세요.");
+      resetPrototype();
+    } catch (error) {
+      console.error("Could not end guest session", error);
+      setLoginError(
+        error instanceof Error
+          ? error.message
+          : "로그아웃 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsSigningOut(false);
+    }
   }
 
   async function sendQuestion(text: string) {
@@ -182,33 +271,21 @@ export default function Home() {
     setIsSendingQuestion(true);
 
     try {
-      const tokenResponse = await fetch("/api/v1/antiforgery", {
-        cache: "no-store",
-        credentials: "same-origin",
-      });
-      if (!tokenResponse.ok) {
-        throw new Error(
-          tokenResponse.status === 401
-            ? "로그인해야 안내를 이용할 수 있어요."
-            : "백엔드 연결 또는 로그인을 확인할 수 없어요.",
-        );
-      }
-
-      const tokenPayload: { requestToken: string } = await tokenResponse.json();
+      const requestToken = await getAntiforgeryToken();
       const response = await fetch("/api/v1/guidance", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRF-TOKEN": tokenPayload.requestToken,
+          "X-CSRF-TOKEN": requestToken,
         },
         body: JSON.stringify({ contextSummary: trimmed, region: null }),
       });
       if (!response.ok) {
         throw new Error(
           response.status === 401
-            ? "로그인 세션이 만료되었어요. 다시 로그인해 주세요."
+            ? "게스트 세션이 만료되었어요. 다시 게스트로 시작해 주세요."
             : "안내 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.",
         );
       }
@@ -420,27 +497,27 @@ export default function Home() {
                       <span className="list-check" aria-hidden="true">
                         ✓
                       </span>
-                      선택하신 관심 주제와 익숙한 정도를 저장해요.
+                      이 체험 화면에서 선택하는 내용은 저장되지 않아요.
                     </li>
                     <li>
                       <span className="list-check" aria-hidden="true">
                         ✓
                       </span>
-                      Google 계정의 이름은 대화 중 부르는 데 사용해요.
+                      계정을 만들지 않으며, 이름이나 프로필을 요청하지 않아요.
                     </li>
                     <li>
                       <span className="list-check" aria-hidden="true">
                         ✓
                       </span>
-                      맞춤 답변에 필요한 대화 내용과 정보가 AI/MCP 처리
-                      시스템으로 전달될 수 있어요.
+                      질문 내용은 안내 처리를 위해 백엔드와 MCP로 전달될 수 있어요.
                     </li>
                     <li>
                       <span className="list-check" aria-hidden="true">
                         ✓
                       </span>
-                      청아는 대화 원문을 저장하지 않아요. 외부 처리 시스템의
-                      보관 조건은 확인이 필요해요.
+                      게스트 세션은 최대 8시간 유지돼요. 애플리케이션에는 대화
+                      저장 기능이 없지만, MCP 처리 시스템의 보관 정책은 별도로
+                      확인해 주세요.
                     </li>
                   </ul>
                 </div>
@@ -448,9 +525,8 @@ export default function Home() {
                 <div className="demo-disclosure" role="note">
                   <strong>체험 화면 안내</strong>
                   <p>
-                    맞춤 정보 저장은 아직 연결되지 않았어요. 로그인 후 보내는
-                    안내 질문은 백엔드와 MCP로 전달되며, 현재 자료는 개발용
-                    Mock이에요.
+                    선택 정보는 저장되지 않아요. 게스트 로그인 후 보내는 질문은
+                    백엔드와 MCP로 전달되며, 현재 자료는 개발용 Mock이에요.
                   </p>
                 </div>
 
@@ -466,7 +542,8 @@ export default function Home() {
                     ✓
                   </span>
                   <span>
-                    위 내용을 확인했고, 맞춤 정보 저장과 처리에 동의합니다.
+                    위 내용을 확인했고, 질문 처리를 위해 정보가 전달될 수 있음에
+                    동의합니다.
                     <strong> (필수)</strong>
                   </span>
                 </label>
@@ -727,39 +804,40 @@ export default function Home() {
 
       {screen === "login" && (
         <section aria-labelledby="login-title" className="message-panel login-panel">
-          <div aria-hidden="true" className="google-mark">
+          <div aria-hidden="true" className="guest-mark">
             G
           </div>
           <p className="eyebrow">거의 다 왔어요</p>
-          <h1 id="login-title">Google 계정으로 로그인해 주세요</h1>
+          <h1 id="login-title">게스트로 시작해 주세요</h1>
           <p className="step-description">
-            로그인해야 청아의 안내 서비스를 이용할 수 있어요. 로그인은
-            맞춤화 동의와 별도로 진행돼요.
+            계정 생성 없이 임시 게스트 세션을 시작해요. 세션은 최대 8시간
+            유지되며, 언제든 로그아웃할 수 있어요.
           </p>
-          <a
-            className="button google-button"
-            href="/auth/login"
+          <button
+            className="button guest-button"
+            disabled={isSigningIn}
+            onClick={() => void signInAsGuest()}
+            type="button"
           >
-            <span aria-hidden="true" className="google-button-mark">
+            <span aria-hidden="true" className="guest-button-mark">
               G
             </span>
-            Google 로그인하기
-          </a>
+            {isSigningIn ? "게스트 세션을 만드는 중..." : "게스트로 시작하기"}
+          </button>
           <p className="demo-note login-demo-note">
-            로그인 설정이 없는 환경에서는 백엔드에서 로그인을 시작할 수 없어요.
+            게스트 세션은 기기 간에 공유되지 않으며 계정 복구 기능이 없어요.
           </p>
-          {loginNotice && (
+          {loginError && (
             <p aria-live="polite" className="inline-notice">
-              로그인이 취소되었어요. 서비스를 이용하려면 이 화면에서 다시
-              로그인해 주세요.
+              {loginError}
             </p>
           )}
           <button
             className="decline-link"
-            onClick={() => setLoginNotice(true)}
+            onClick={() => setScreen("onboarding")}
             type="button"
           >
-            로그인하지 않고 돌아가기
+            이전 단계로 돌아가기
           </button>
         </section>
       )}
@@ -774,7 +852,7 @@ export default function Home() {
                 궁금한 내용을 고르거나 편하게 적어 주세요.
               </p>
             </div>
-            <span className="account-mark" aria-label="로그인됨">
+            <span className="account-mark" aria-label="게스트로 로그인됨">
               <span aria-hidden="true">✓</span>
             </span>
           </div>
@@ -906,9 +984,22 @@ export default function Home() {
           </section>
 
           <p className="home-demo-note">
-            질문은 백엔드를 통해 MCP로 전달됩니다. 대화 원문은 저장하지 않으며,
-            현재 연결된 자료는 개발용 Mock입니다.
+            질문은 백엔드를 통해 MCP로 전달됩니다. 애플리케이션에는 대화 저장
+            기능이 없으며, 현재 연결된 자료는 개발용 Mock입니다.
           </p>
+          <button
+            className="decline-link"
+            disabled={isSigningOut}
+            onClick={() => void signOutGuest()}
+            type="button"
+          >
+            {isSigningOut ? "로그아웃하는 중..." : "게스트 로그아웃"}
+          </button>
+          {loginError && (
+            <p aria-live="polite" className="inline-notice">
+              {loginError}
+            </p>
+          )}
         </section>
       )}
 
